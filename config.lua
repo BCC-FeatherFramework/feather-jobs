@@ -36,7 +36,9 @@ Config = {
     },
 
     Access = {
-        trustedReaders = { ['feather-jobs'] = true, ['feather-admin'] = true, ['bcc-society'] = true },
+        trustedReaders = { ['feather-jobs'] = true, ['feather-admin'] = true, ['bcc-society'] = true,
+            ['bcc-stables'] = true, ['bcc-doorlocks'] = true,
+            ['bcc-craft'] = true },
         -- May register job definitions/grades they will own.
         trustedRegistrars = { ['feather-jobs'] = true, ['feather-admin'] = true, ['bcc-society'] = true },
         -- May change definitions owned by another resource.
