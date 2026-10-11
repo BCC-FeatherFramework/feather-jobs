@@ -292,6 +292,7 @@ Current consumers:
 | `bcc-doorlocks` | `trustedReaders` | Job doors (`CheckAssignment`) |
 | `bcc-craft` | `trustedReaders` | Job-restricted crafting (`CheckAssignment`) |
 | `bcc-stables` | `trustedReaders` | Trainer-only taming and training (`Config.trainerJob`) |
+| `bcc-banks` | `trustedReaders` | Bank administration by job (`Config.Admin.jobs`, default `banker`) |
 
 The development fixture `feather-jobs-tests` is trusted only while DevMode is on.
 
