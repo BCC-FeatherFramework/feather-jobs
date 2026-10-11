@@ -291,9 +291,89 @@ Current consumers:
 | `bcc-society` | readers, registrars, assigners, auditors + service grant | Reference consumer: job types, hire/promote/fire, duty, active job |
 | `bcc-doorlocks` | `trustedReaders` | Job doors (`CheckAssignment`) |
 | `bcc-craft` | `trustedReaders` | Job-restricted crafting (`CheckAssignment`) |
-| `bcc-stables` | `trustedReaders` | Job checks |
+| `bcc-stables` | `trustedReaders` | Trainer-only taming and training (`Config.trainerJob`) |
 
 The development fixture `feather-jobs-tests` is trusted only while DevMode is on.
+
+### Adding a consumer
+
+Keep the entries already in each list and add the new resource. Then restart, in
+this order: `feather-organizations` (if changed), `feather-jobs`, `feather-admin`
+(if changed), and the consumer last.
+
+**A resource that only checks jobs** (doors, crafting, shops) needs one entry, in
+`feather-jobs/config.lua`:
+
+```lua
+Access = {
+    trustedReaders = { ['feather-jobs'] = true, ['feather-admin'] = true,
+        ['bcc-society'] = true, ['my-doors'] = true },
+    -- other groups unchanged
+}
+```
+
+It then calls `CheckAssignment` and needs no service grant. Without the entry
+every check returns `authorization_denied`.
+
+**A resource that defines jobs or hires, promotes and fires** (a society or job
+center) needs four groups in `feather-jobs/config.lua`:
+
+```lua
+Access = {
+    trustedReaders    = { --[[ ... ]] ['my-society'] = true },
+    trustedRegistrars = { --[[ ... ]] ['my-society'] = true }, -- RegisterJobDefinition, DefineGrade
+    trustedAssigners  = { --[[ ... ]] ['my-society'] = true }, -- CreateAssignment, ChangeAssignmentGrade,
+                                                               -- SetDutyState, SetActiveAssignment, EndAssignment
+    trustedAuditors   = { --[[ ... ]] ['my-society'] = true }, -- InspectJobHistory on its own records
+    -- privileged* groups: leave them to feather-admin
+}
+```
+
+and a service grant in `feather-admin/configs/service_policy.lua`. The outer key
+is the domain asking (`feather-jobs`), the inner key the calling resource:
+
+```lua
+Config.servicePolicy = {
+    -- existing domains unchanged
+    ['feather-jobs'] = {
+        ['my-society'] = {
+            ['jobs.definition.manage'] = true, -- register job types and grades
+            ['jobs.assignment.manage'] = true  -- hire, promote, duty, fire
+        }
+    }
+}
+```
+
+A missing trust entry fails with `authorization_denied` ("not trusted"); a missing
+grant fails with `authorization_denied` from the policy, or `policy_unavailable`
+when feather-admin is not started.
+
+**Organization employers.** Assignments with `employerType = 'organization'` are
+validated through feather-organizations, which must trust Jobs as a reader in
+`feather-organizations/config.lua`:
+
+```lua
+Access = {
+    trustedReaders = { --[[ ... ]] ['feather-jobs'] = true },
+}
+```
+
+**Consumer configuration examples.** Job rules live in the consumer, as job keys
+and grade ordinals that Jobs knows:
+
+```lua
+-- bcc-doorlocks config.lua: doors store job keys; opening asks CheckAssignment.
+Config.JobAccess = { requireOnDuty = true }   -- dutyState = 'on_duty'
+
+-- bcc-craft configs/*.lua: one recipe limited to chefs of grade 10 or higher.
+requiredJobs = { { 'chef', 10 } },            -- { jobKey, minimum grade ordinal }
+
+-- bcc-stables config/main.lua: trainers only.
+Config.trainerJob = { { name = 'trainer', grade = 0 } }
+```
+
+The job keys must exist in Jobs: they are registered by the resource that owns
+them (bcc-society registers its `Config.Jobs` types on start).
 
 ## Database access
 
