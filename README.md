@@ -9,8 +9,9 @@ other domains. Native Feather; no legacy compatibility layer.
 Implements phases J0–J3 of the Jobs master plan (`feather-framework-docs`,
 `feather-jobs/Feather_Jobs_Master_Plan.md`) on the Contract 1 service kernel. J4
 (Society adapter) is delivered by the `bcc-society` rewrite. J5 (consumer
-cutover) waits for the remaining job-reading scripts' Feather rewrites, and J6
-(legacy removal) has nothing left on the Feather side.
+cutover) is under way: the bcc-doorlocks and bcc-craft Feather ports read jobs
+through `CheckAssignment`, and only bcc-housing is left. J6 (legacy removal) has
+nothing left on the Feather side.
 
 Shipped defaults use `Config.DevMode=false` with service-policy authorization
 enabled. Acceptance fixtures receive no trust and development commands are not
@@ -37,6 +38,18 @@ Development acceptance passed on 2026-10-02:
   event delivery.
 - `SocietyLiveTest` (bcc-society) passed 9/9 against Jobs as the reference
   consumer.
+
+Live acceptance with bcc-society 2.0.0 passed on 2026-10-11, two players:
+
+- `SocietyLiveTest` passed 12/12 (hire, promote, fire across two characters).
+- Offline changes: hire, promote (`nurse` 0 to `doctor` 10 on the same
+  assignment, revision 3 to 4) and fire of a character who was not connected.
+- Restart recovery: a restart right after a queued hire left no open workflow.
+- Duty: on/off and disconnect changed only the duty state, never the job or grade.
+- Two employers: one character held jobs at two societies; the active job
+  switched and ending one assignment left the other open.
+- Second consumer: the bcc-doorlocks job door check (`CheckAssignment` with
+  `dutyState = 'on_duty'`) is pending.
 
 ## Dependencies
 
@@ -117,8 +130,10 @@ JobsReleaseContractSmokeTest
 ```
 
 Expect 10/10: the development lifecycle command is not registered and the
-`feather-jobs-tests` fixture receives no trust. Feather-admin's service policy
-grants Jobs actions only to `feather-jobs`, `feather-admin` and `bcc-society`.
+`feather-jobs-tests` fixture receives no trust. No Jobs service grants ship with
+feather-admin: each resource that registers definitions or changes assignments
+needs its own entry in `Config.servicePolicy['feather-jobs']` (for example
+`bcc-society`). Resources that only read need `trustedReaders` and no grant.
 
 ## Ownership and decisions
 
@@ -269,8 +284,16 @@ feather-admin after changing it.
 (validated through feather-organizations, which must list `feather-jobs` in its
 `trustedReaders`) and `society` (trusted to the owning resource).
 
-Current consumer: `bcc-society` (reference consumer). The development fixture
-`feather-jobs-tests` is trusted only while DevMode is on.
+Current consumers:
+
+| Resource | Access | Uses |
+|---|---|---|
+| `bcc-society` | readers, registrars, assigners, auditors + service grant | Reference consumer: job types, hire/promote/fire, duty, active job |
+| `bcc-doorlocks` | `trustedReaders` | Job doors (`CheckAssignment`) |
+| `bcc-craft` | `trustedReaders` | Job-restricted crafting (`CheckAssignment`) |
+| `bcc-stables` | `trustedReaders` | Job checks |
+
+The development fixture `feather-jobs-tests` is trusted only while DevMode is on.
 
 ## Database access
 
@@ -288,10 +311,9 @@ when it also selects the active assignment), down from 19.
 
 ## Remaining work
 
-- **J5 consumer cutover:** bcc-doorlocks, bcc-craft and bcc-housing still read
-  `character.job`/`jobGrade`. They are VORP and bcc-utils scripts that are not
-  running on Feather yet, so each moves to `CheckAssignment` as part of its own
-  Feather rewrite, as bcc-society did.
+- **J5 consumer cutover:** bcc-doorlocks and bcc-craft moved to
+  `CheckAssignment` in their Feather ports (2.0.0). bcc-housing still reads
+  `character.job`/`jobGrade`; it moves as part of its own Feather rewrite.
 - **J6 legacy removal:** nothing remains on the Feather side. feather-character
   has no job fields or job mutators, and no Feather resource reads a character
   job. The legacy fields exist only in the VORP-era scripts above.
