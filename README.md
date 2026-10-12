@@ -8,10 +8,11 @@ other domains. Native Feather; no legacy compatibility layer.
 
 Implements phases J0–J3 of the Jobs master plan (`feather-framework-docs`,
 `feather-jobs/Feather_Jobs_Master_Plan.md`) on the Contract 1 service kernel. J4
-(Society adapter) is delivered by the `bcc-society` rewrite. J5 (consumer
-cutover) is under way: the bcc-doorlocks and bcc-craft Feather ports read jobs
-through `CheckAssignment`, and only bcc-housing is left. J6 (legacy removal) has
-nothing left on the Feather side.
+(Society adapter) is delivered by `bcc-society` 2.0.0. The current J5 consumers
+(bcc-doorlocks, bcc-craft, bcc-stables, bcc-banks and bcc-housing) use
+`CheckAssignment` in their Feather ports. Code integration and live acceptance
+are tracked separately below. J6 has no legacy job fields left on the Feather
+side.
 
 Shipped defaults use `Config.DevMode=false` with service-policy authorization
 enabled. Acceptance fixtures receive no trust and development commands are not
@@ -105,7 +106,12 @@ JobsLifecycleSmokeTest <serverId|characterUuid>
 Expect 20/20. The test mutates data: it registers a uniquely keyed `smoke_*`
 job, assigns it, walks the lifecycle, ends the assignment, and retires the job.
 
-For the second-resource check, also add the fixture's policy grant
+The optional `feather-jobs-tests` fixture is not included in this repository
+or the current development-server resources. The recorded 14/14 result above
+is historical acceptance evidence. To rerun it, first obtain the fixture used
+for that acceptance run.
+
+With the fixture installed on an isolated development server, add its policy grant
 (`Config.servicePolicy['feather-jobs']['feather-jobs-tests']` with
 `jobs.definition.manage` and `jobs.assignment.manage`) to feather-admin, restart
 feather-admin, then:
@@ -115,8 +121,8 @@ ensure feather-jobs-tests
 JobsConsumerLiveTest <serverId>
 ```
 
-Expect 14/14. The fixture is described in `[test]/feather-jobs-tests/README.md`.
-Remove the fixture grant and set DevMode back to `false` afterwards.
+Expect 14/14 for that fixture version. Remove its policy grant, stop the fixture,
+set DevMode back to `false`, and restart feather-jobs and feather-admin afterwards.
 
 If the first mutation returns `authorization_denied`, restart feather-admin so it
 loads the `['feather-jobs']` service-policy grants.
@@ -130,10 +136,13 @@ JobsReleaseContractSmokeTest
 ```
 
 Expect 10/10: the development lifecycle command is not registered and the
-`feather-jobs-tests` fixture receives no trust. No Jobs service grants ship with
-feather-admin: each resource that registers definitions or changes assignments
-needs its own entry in `Config.servicePolicy['feather-jobs']` (for example
-`bcc-society`). Resources that only read need `trustedReaders` and no grant.
+`feather-jobs-tests` fixture receives no trust. Each resource that registers
+definitions or changes assignments needs its own entry in
+`Config.servicePolicy['feather-jobs']` in feather-admin. The development server
+already grants `bcc-society` both `jobs.definition.manage` and
+`jobs.assignment.manage`. Verify these grants in the Admin configuration you
+deploy; Jobs does not install them. Resources that only read need
+`trustedReaders` and no mutation grant.
 
 ## Ownership and decisions
 
@@ -275,8 +284,8 @@ Payloads are bounded to 4096 bytes.
 `Config.Access` holds the trusted resource groups: `trustedReaders`,
 `trustedRegistrars` (with `privilegedRegistrars`), `trustedAssigners` (with
 `privilegedAssigners`), and `trustedAuditors` (with `privilegedAuditors`). A
-privileged entry must also be in its trusted group. Each consumer additionally
-needs `jobs.definition.manage` and/or `jobs.assignment.manage` in
+privileged entry must also be in its trusted group. Each consumer that mutates
+Jobs additionally needs `jobs.definition.manage` and/or `jobs.assignment.manage` in
 `Config.servicePolicy['feather-jobs'][<resource>]` of feather-admin; restart
 feather-admin after changing it.
 
@@ -393,9 +402,12 @@ when it also selects the active assignment), down from 19.
 
 ## Remaining work
 
-- **J5 consumer cutover:** bcc-doorlocks and bcc-craft moved to
-  `CheckAssignment` in their Feather ports (2.0.0). bcc-housing still reads
-  `character.job`/`jobGrade`; it moves as part of its own Feather rewrite.
-- **J6 legacy removal:** nothing remains on the Feather side. feather-character
-  has no job fields or job mutators, and no Feather resource reads a character
-  job. The legacy fields exist only in the VORP-era scripts above.
+- **J5 live validation:** the current consumers listed above are integrated
+  through `CheckAssignment`, including housing realtor and agent-shop checks.
+  The recorded bcc-doorlocks on-duty door acceptance is still pending; validate
+  consumer-specific job and grade rules on the server before declaring their
+  gameplay acceptance complete.
+- **J6 legacy removal:** feather-character has no job fields or job mutators.
+  The listed Feather consumer ports use Jobs rather than legacy character fields.
+- **Optional acceptance fixture:** restore `feather-jobs-tests` separately if
+  the historical second-resource acceptance needs to be rerun.
