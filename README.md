@@ -59,6 +59,7 @@ Live acceptance with bcc-society 2.0.0 passed on 2026-10-11, two players:
 
 Acceptance of 0.2.0 on 2026-10-17, nobody connected (character UUIDs):
 
+- `JobsReleaseContractSmokeTest` passed 11/11, including assignment integrity.
 - `JobsLifecycleSmokeTest` passed 26/26, including two employers for one job,
   the on-duty filter, active job switching, ending one assignment while the
   other stays, and the stored reference.
