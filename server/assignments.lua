@@ -70,13 +70,7 @@ local function OpenSlot(characterId, jobId, employerType, employerId)
     return table.concat({ characterId, jobId, employerType or '-', employerId or '-' }, '|')
 end
 
-local common = { requestId = true, reasonCode = true, actorSource = true, correlationId = true }
-function JobAssignments.Allowed(extra)
-    local result = {}
-    for field in pairs(common) do result[field] = true end
-    for _, field in ipairs(extra) do result[field] = true end
-    return result
-end
+JobAssignments.Allowed = Jobs.Allowed
 
 -- Shared prologue: trusted assigner and field/shape validation.
 function JobAssignments.Begin(request, resource, allowedFields)
@@ -214,6 +208,8 @@ function JobAssignments.Create(request, resource)
                     resource = resource,
                     requestId = request.requestId,
                     reasonCode = request.reasonCode,
+                    referenceType = request.referenceType,
+                    referenceId = request.referenceId,
                     revision = 1,
                     actor = actor.value,
                     details = {
@@ -247,6 +243,8 @@ function JobAssignments.Create(request, resource)
                         resource = resource,
                         requestId = request.requestId,
                         reasonCode = request.reasonCode,
+                        referenceType = request.referenceType,
+                        referenceId = request.referenceId,
                         revision = stateRevision + 1,
                         actor = actor.value,
                         details = { jobKey = row.job_key, activeAssignmentId = assignmentId }
@@ -348,6 +346,8 @@ function JobAssignments.ChangeGrade(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = revision + 1,
                 actor = actor.value,
                 details = {
@@ -432,6 +432,8 @@ function JobAssignments.End(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = revision + 1,
                 actor = actor.value,
                 details = {

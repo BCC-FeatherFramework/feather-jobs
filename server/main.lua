@@ -70,6 +70,15 @@ RegisterCommand('JobsReleaseContractSmokeTest', function(source)
         local events = JobEvents.State()
         local migrations = tonumber(DB.value('SELECT COUNT(*) FROM `feather_job_schema_migrations`'))
         local denied = JobDefinitions.List({}, 'untrusted-smoke-caller')
+        -- Integrity: an open slot exactly on open assignments, and every active
+        -- selection points at an open assignment of the same character.
+        local broken = tonumber(DB.value([[
+            SELECT (SELECT COUNT(*) FROM `feather_job_assignments`
+                    WHERE (`status`='active') <> (`open_slot` IS NOT NULL))
+                + (SELECT COUNT(*) FROM `feather_job_character_state` s
+                    LEFT JOIN `feather_job_assignments` a ON a.`assignment_id`=s.`active_assignment_id`
+                    WHERE s.`active_assignment_id` IS NOT NULL
+                        AND (a.`assignment_id` IS NULL OR a.`status`<>'active' OR a.`character_id`<>s.`character_id`))]]))
         local fixture = 'feather-jobs-tests'
         local fixtureAbsent = true
         for _, group in pairs(Config.Access) do
@@ -85,8 +94,10 @@ RegisterCommand('JobsReleaseContractSmokeTest', function(source)
             { 'migration ledger', migrations == JobMigrations.Count },
             { 'snapshot route owned', routeFound },
             { 'untrusted reader denied', not denied.ok and denied.code == 'authorization_denied' },
+            { 'assignment integrity', broken == 0 },
             { 'contract capabilities', capabilities.ok and capabilities.value.contract == 1
-                and capabilities.value.features.assignments == 1 }
+                and capabilities.value.features.assignments == 1
+                and capabilities.value.features.references == 1 }
         }
         local passed = 0
         for _, test in ipairs(tests) do

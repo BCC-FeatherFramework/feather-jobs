@@ -69,13 +69,15 @@ function JobEvents.RecordMany(tx, entries)
             sourceResource = spec.resource,
             requestId = spec.requestId,
             reasonCode = spec.reasonCode,
+            referenceType = spec.referenceType,
+            referenceId = spec.referenceId,
             actorAccountId = actor.accountId,
             actorCharacterId = actor.characterId,
             correlationId = actor.correlationId
         }
         for field, value in pairs(details) do payload[field] = value end
 
-        eventRows[#eventRows + 1] = '(?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        eventRows[#eventRows + 1] = '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         Push(eventId)
         Push(entry.eventType)
         Push(spec.aggregateType)
@@ -85,6 +87,8 @@ function JobEvents.RecordMany(tx, entries)
         Push(spec.resource)
         Push(spec.requestId)
         Push(spec.reasonCode)
+        Push(spec.referenceType)
+        Push(spec.referenceId)
         Push(spec.revision)
         Push(actor.accountId)
         Push(actor.characterId)
@@ -100,8 +104,8 @@ function JobEvents.RecordMany(tx, entries)
     tx.exec([[
         INSERT INTO `feather_job_events`
             (`event_id`,`event_type`,`aggregate_type`,`aggregate_id`,`job_id`,`character_id`,
-             `source_resource`,`request_id`,`reason_code`,`revision`,`actor_account_id`,
-             `actor_character_id`,`correlation_id`,`details_json`)
+             `source_resource`,`request_id`,`reason_code`,`reference_type`,`reference_id`,`revision`,
+             `actor_account_id`,`actor_character_id`,`correlation_id`,`details_json`)
         VALUES ]] .. table.concat(eventRows, ','), table.unpack(eventParams, 1, eventParams.n))
     tx.exec('INSERT INTO `feather_job_outbox` (`event_id`,`event_type`,`payload_json`) VALUES ' ..
         table.concat(outboxRows, ','), table.unpack(outboxParams))
@@ -211,8 +215,8 @@ function JobEvents.History(request, resource)
         or '`aggregate_type`=? AND `aggregate_id`=?'
     local sql = [[
         SELECT `event_id`,`event_type`,`aggregate_type`,`aggregate_id`,`job_id`,`character_id`,
-            `source_resource`,`request_id`,`reason_code`,`revision`,`actor_account_id`,
-            `actor_character_id`,`correlation_id`,`details_json`,
+            `source_resource`,`request_id`,`reason_code`,`reference_type`,`reference_id`,`revision`,
+            `actor_account_id`,`actor_character_id`,`correlation_id`,`details_json`,
             FLOOR(UNIX_TIMESTAMP(`created_at`))*1000 AS created_at_ms
         FROM `feather_job_events` WHERE ]] .. column
     local params = request.aggregateType == 'character' and { aggregateId } or { request.aggregateType, aggregateId }
@@ -244,6 +248,8 @@ function JobEvents.History(request, resource)
             sourceResource = row.source_resource,
             requestId = row.request_id,
             reasonCode = row.reason_code,
+            referenceType = row.reference_type,
+            referenceId = row.reference_id,
             revision = tonumber(row.revision),
             actorAccountId = row.actor_account_id,
             actorCharacterId = row.actor_character_id,

@@ -56,13 +56,7 @@ local function NewUuid(tx)
     return row and Jobs.Uuid(row.id) and row.id or nil
 end
 
-local common = { requestId = true, reasonCode = true, actorSource = true, correlationId = true }
-local function Allowed(extra)
-    local result = {}
-    for field in pairs(common) do result[field] = true end
-    for _, field in ipairs(extra) do result[field] = true end
-    return result
-end
+local Allowed = Jobs.Allowed
 
 -- Shared prologue: trusted registrar and field/shape validation.
 local function Begin(request, resource, allowedFields)
@@ -129,6 +123,8 @@ function JobDefinitions.Register(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = 1,
                 actor = actor.value,
                 details = {
@@ -202,6 +198,8 @@ function JobDefinitions.Update(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = revision + 1,
                 actor = actor.value,
                 details = {
@@ -315,6 +313,8 @@ function JobDefinitions.DefineGrade(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = revision,
                 actor = actor.value,
                 details = {

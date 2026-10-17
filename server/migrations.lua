@@ -112,6 +112,14 @@ local definitions = {
             CONSTRAINT `fk_job_outbox_event` FOREIGN KEY (`event_id`) REFERENCES `feather_job_events` (`event_id`),
             CONSTRAINT `chk_job_outbox_status` CHECK (`status` IN ('pending','published'))
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin]]
+    } },
+    { id = '004_job_event_references', statements = {
+        -- Links an audit fact to the consumer record behind it (for example
+        -- society_membership + membership ID), so a workflow can be traced across domains.
+        [[ALTER TABLE `feather_job_events`
+            ADD COLUMN IF NOT EXISTS `reference_type` VARCHAR(48) NULL AFTER `reason_code`,
+            ADD COLUMN IF NOT EXISTS `reference_id` VARCHAR(128) NULL AFTER `reference_type`,
+            ADD KEY IF NOT EXISTS `idx_job_event_reference` (`reference_type`,`reference_id`)]]
     } }
 }
 JobMigrations.Count = #definitions

@@ -68,19 +68,43 @@ function Jobs.ValidateCommon(request)
     if request.correlationId ~= nil and not Jobs.Token(request.correlationId, 128) then
         return Err('invalid_input', 'Correlation ID is invalid.')
     end
+    -- Optional link to the consumer record behind the change (a membership, an order).
+    if (request.referenceType == nil) ~= (request.referenceId == nil)
+        or (request.referenceType ~= nil and not Jobs.Key(request.referenceType, 48))
+        or (request.referenceId ~= nil and not Jobs.Token(request.referenceId, 128)) then
+        return Err('invalid_input', 'Reference type and ID must be given together and be stable keys.')
+    end
     return Ok(true)
 end
 
--- Length-prefixed so labels containing delimiters cannot collide.
+-- Fields every mutation accepts besides its own.
+Jobs.CommonFields = {
+    requestId = true, reasonCode = true, actorSource = true, correlationId = true,
+    referenceType = true, referenceId = true
+}
+function Jobs.Allowed(extra)
+    local result = {}
+    for field in pairs(Jobs.CommonFields) do result[field] = true end
+    for _, field in ipairs(extra) do result[field] = true end
+    return result
+end
+
+-- Length-prefixed so labels containing delimiters cannot collide. The optional
+-- reference is appended only when given, so receipts stored before references
+-- existed keep their fingerprints and still replay.
 function Jobs.Fingerprint(operation, request, fields)
     local parts = { operation }
-    for _, field in ipairs(fields) do
-        local value = request[field]
+    local function Push(value)
         if value == nil then parts[#parts + 1] = '~'
         else
             value = tostring(value)
             parts[#parts + 1] = tostring(#value) .. ':' .. value
         end
+    end
+    for _, field in ipairs(fields) do Push(request[field]) end
+    if request.referenceType ~= nil then
+        Push(request.referenceType)
+        Push(request.referenceId)
     end
     return table.concat(parts, '|')
 end
@@ -107,7 +131,7 @@ function Jobs.GetCapabilities()
             multipleAssignments = 1, activeAssignment = Config.ActiveAssignment.enabled and 1 or 0,
             duty = 1, revisions = 1, idempotency = 1, operationLookup = 1,
             outbox = 1, eventPublication = 1, auditHistory = 1,
-            employerValidation = 1, clientSnapshot = 1,
+            employerValidation = 1, clientSnapshot = 1, references = 1,
             societyAdapter = 0, legacyMigration = 0
         } })
 end

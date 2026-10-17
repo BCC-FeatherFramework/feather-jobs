@@ -6,6 +6,9 @@ state. Independent of societies, ranks, wages, payroll, uniforms, locations,
 licenses, and general permissions; those remain with gameplay resources and
 other domains. Native Feather; no legacy compatibility layer.
 
+Version 0.2.0. [Contract 1](CONTRACT.md) is proposed for freezing; `CONTRACT.md`
+is the reference to code against, this README explains the model and setup.
+
 Implements phases J0–J3 of the Jobs master plan (`feather-framework-docs`,
 `feather-jobs/Feather_Jobs_Master_Plan.md`) on the Contract 1 service kernel. J4
 (Society adapter) is delivered by `bcc-society` 2.0.0. The current J5 consumers
@@ -18,7 +21,9 @@ Shipped defaults use `Config.DevMode=false` with service-policy authorization
 enabled. Acceptance fixtures receive no trust and development commands are not
 registered. The permanent server-console `JobsReleaseContractSmokeTest` is
 read-only and checks readiness, policy mode, development-command and fixture
-exclusion, publisher state, migrations, the client route, and capabilities.
+exclusion, publisher state, migrations, the client route, assignment integrity
+(open slots match open assignments; every active selection points at an open
+assignment of the same character), and capabilities.
 Enable DevMode only on an isolated development server; disable it and restart
 before packaging.
 
@@ -50,7 +55,17 @@ Live acceptance with bcc-society 2.0.0 passed on 2026-10-11, two players:
 - Two employers: one character held jobs at two societies; the active job
   switched and ending one assignment left the other open.
 - Second consumer: the bcc-doorlocks job door check (`CheckAssignment` with
-  `dutyState = 'on_duty'`) is pending.
+  `dutyState = 'on_duty'`) passed on 2026-10-17 (see below).
+
+Acceptance of 0.2.0 on 2026-10-17, nobody connected (character UUIDs):
+
+- `JobsLifecycleSmokeTest` passed 26/26, including two employers for one job,
+  the on-duty filter, active job switching, ending one assignment while the
+  other stays, and the stored reference.
+- bcc-doorlocks as second consumer: for a bcc-society `doctor` off duty,
+  `DoorlocksJobCheck` reported the job held and the door closed; after
+  `SocietyDevDuty <character> on 3` the door opened; after `off 3` it was
+  closed again.
 
 ## Dependencies
 
@@ -79,8 +94,9 @@ ensure feather-jobs
 ensure feather-admin
 ```
 
-The first start applies three checksummed migrations and logs
-`event=startup.ready migrationsApplied=3 routes=1`. Later starts apply none.
+The first start applies four checksummed migrations and logs
+`event=startup.ready migrationsApplied=4 routes=1`. Later starts apply none (an
+upgrade from 0.1.0 applies one: `004_job_event_references`).
 
 ## Installation and first acceptance
 
@@ -93,18 +109,24 @@ ensure feather-jobs
 JobsReleaseContractSmokeTest
 ```
 
-Expect 10/10 with the shipped configuration.
+Expect 11/11 with the shipped configuration.
 
 The mutating acceptance tests need `Config.DevMode=true` on an isolated
-development server. Enable it, restart feather-jobs, and run with a character
-loaded:
+development server. Enable it, restart feather-jobs, and run it for a character
+(a UUID works offline) whose active job, if any, is not owned by another
+resource; a character without a job is simplest:
 
 ```text
 JobsLifecycleSmokeTest <serverId|characterUuid>
 ```
 
-Expect 20/20. The test mutates data: it registers a uniquely keyed `smoke_*`
-job, assigns it, walks the lifecycle, ends the assignment, and retires the job.
+Expect 26/26. The test mutates data: it registers a uniquely keyed `smoke_*`
+job, assigns it, adds the same job for a second employer (a separate
+assignment), checks that an on-duty filter skips the off-duty one, switches the
+active job, ends one assignment while the other stays, records a reference,
+walks grade and duty changes, ends the assignments, and retires the job. It
+runs as feather-jobs, so it needs both Jobs policy actions granted to
+`feather-jobs` while it runs.
 
 The optional `feather-jobs-tests` fixture is not included in this repository
 or the current development-server resources. The recorded 14/14 result above
@@ -135,7 +157,7 @@ The shipped configuration is the production posture. Run after startup:
 JobsReleaseContractSmokeTest
 ```
 
-Expect 10/10: the development lifecycle command is not registered and the
+Expect 11/11: the development lifecycle command is not registered and the
 `feather-jobs-tests` fixture receives no trust. Each resource that registers
 definitions or changes assignments needs its own entry in
 `Config.servicePolicy['feather-jobs']` in feather-admin. The development server
@@ -186,7 +208,10 @@ integer 0–60000) report lifecycle.
 Every mutation takes a stable `requestId` (at most 128 characters) and a
 namespaced `reasonCode` such as `society.hire`. It also accepts an optional
 `actorSource` (the player who triggered it; Jobs derives that player's account
-and character from Core) and an optional `correlationId`. Retrying a request ID
+and character from Core), an optional `correlationId`, and an optional
+`referenceType` + `referenceId` (the caller's record behind the change, for
+example `society_membership` and its ID), stored on the audit event and
+published with it. Retrying a request ID
 with the same payload replays the stored result with `replayed = true`; reusing it
 with a different payload returns `idempotency_conflict`.
 
@@ -404,9 +429,11 @@ when it also selects the active assignment), down from 19.
 
 - **J5 live validation:** the current consumers listed above are integrated
   through `CheckAssignment`, including housing realtor and agent-shop checks.
-  The recorded bcc-doorlocks on-duty door acceptance is still pending; validate
-  consumer-specific job and grade rules on the server before declaring their
-  gameplay acceptance complete.
+  The bcc-doorlocks on-duty door check passed offline on 2026-10-17
+  (`DoorlocksJobCheck <characterUuid> <jobKey>` before and after
+  `SocietyDevDuty <characterUuid> on <society id>`). Validate the other
+  consumers' job and grade rules in game before declaring their gameplay
+  acceptance complete.
 - **J6 legacy removal:** feather-character has no job fields or job mutators.
   The listed Feather consumer ports use Jobs rather than legacy character fields.
 - **Optional acceptance fixture:** restore `feather-jobs-tests` separately if

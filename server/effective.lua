@@ -52,6 +52,8 @@ function JobEffective.SetDuty(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = revision + 1,
                 actor = actor.value,
                 details = { jobKey = row.job_key, dutyState = request.dutyState, previousDutyState = row.duty_state }
@@ -135,6 +137,8 @@ function JobEffective.SetActive(request, resource)
                 resource = resource,
                 requestId = request.requestId,
                 reasonCode = request.reasonCode,
+                referenceType = request.referenceType,
+                referenceId = request.referenceId,
                 revision = state.revision + 1,
                 actor = actor.value,
                 details = {

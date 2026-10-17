@@ -1,6 +1,8 @@
 -- Development-only acceptance test. MUTATES DATA: it registers a uniquely keyed
--- smoke_* job, assigns it to the given character, walks the lifecycle, ends the
--- assignment, and retires the job. Never enable DevMode in production.
+-- smoke_* job, assigns it to the given character twice (two employers), switches
+-- the active job, walks the lifecycle, ends both assignments, and retires the
+-- job. The character may be offline but must not have an active job owned by
+-- another resource. Never enable DevMode in production.
 --   Usage (server console): JobsLifecycleSmokeTest <serverId|characterUuid>
 
 local function Target(argument)
@@ -20,6 +22,16 @@ Jobs.RegisterDevCommand('JobsLifecycleSmokeTest', function(source, args)
             return
         end
         local owner, untrusted = GetCurrentResourceName(), 'untrusted-smoke-caller'
+        local before = JobEffective.Build(characterId)
+        if not before.ok then
+            print('[JobsLifecycleSmokeTest] snapshot failed: ' .. tostring(before.code))
+            return
+        end
+        if before.value.active and before.value.active.ownerResource ~= owner then
+            print(('[JobsLifecycleSmokeTest] the active job of this character belongs to %s; use a character without a job')
+                :format(tostring(before.value.active.ownerResource)))
+            return
+        end
         local run = ('%d%04d'):format(os.time(), math.random(0, 9999))
         local jobKey = 'smoke_' .. run
         local function Id(step) return ('smoke:%s:%s'):format(run, step) end
@@ -58,6 +70,37 @@ Jobs.RegisterDevCommand('JobsLifecycleSmokeTest', function(source, args)
             expectedRevision = 2, dutyState = 'on_duty', reasonCode = 'jobs.smoke_test' }, owner)
         local checked = JobEffective.Check({ characterId = characterId, jobKey = jobKey,
             minGradeOrdinal = 10, dutyState = 'on_duty' }, owner)
+
+        -- Same job for a second employer: a separate assignment, never an overwrite.
+        local employerId = DB.value('SELECT UUID()')
+        local second = JobAssignments.Create({ requestId = Id('assign-second'), characterId = characterId,
+            jobKey = jobKey, gradeKey = 'recruit', employerType = 'society', employerId = employerId,
+            provenanceType = 'smoke_test', provenanceId = run .. ':second', referenceType = 'smoke_run',
+            referenceId = run, reasonCode = 'jobs.smoke_test' }, owner)
+        local secondId = second.ok and second.value.assignmentId or '00000000-0000-0000-0000-000000000000'
+        -- A door that requires duty (bcc-doorlocks) must not open for the off-duty assignment.
+        local offDuty = JobEffective.Check({ characterId = characterId, jobKey = jobKey,
+            employerType = 'society', employerId = employerId, dutyState = 'on_duty' }, owner)
+        local both = JobEffective.Build(characterId)
+        local function Holds(snapshot, assignmentId)
+            for _, assignment in ipairs(snapshot.ok and snapshot.value.assignments or {}) do
+                if assignment.assignmentId == assignmentId then return true end
+            end
+            return false
+        end
+        local activated = JobEffective.SetActive({ requestId = Id('activate'), characterId = characterId,
+            assignmentId = secondId, expectedRevision = both.ok and both.value.revision or 0,
+            reasonCode = 'jobs.smoke_test' }, owner)
+        local activeCheck = JobEffective.Check({ characterId = characterId, jobKey = jobKey, activeOnly = true }, owner)
+        local endedSecond = JobAssignments.End({ requestId = Id('end-second'), assignmentId = secondId,
+            expectedRevision = 1, reasonCode = 'jobs.smoke_test' }, owner)
+        local afterSecond = JobEffective.Build(characterId)
+        local secondHistory = JobEvents.History({ aggregateType = 'assignment', aggregateId = secondId }, owner)
+        local referenced = false
+        for _, item in ipairs(secondHistory.ok and secondHistory.value.items or {}) do
+            if item.eventType == 'assignment.created' and item.referenceType == 'smoke_run'
+                and item.referenceId == run then referenced = true end
+        end
         local foreignEnd = JobAssignments.End({ requestId = Id('end-foreign'), assignmentId = assignmentId,
             expectedRevision = 3, reasonCode = 'jobs.smoke_test' }, untrusted)
         local ended = JobAssignments.End({ requestId = Id('end'), assignmentId = assignmentId,
@@ -70,10 +113,7 @@ Jobs.RegisterDevCommand('JobsLifecycleSmokeTest', function(source, args)
         local retired = JobDefinitions.Update({ requestId = Id('retire'), jobId = jobId, expectedRevision = 1,
             status = 'retired', reasonCode = 'jobs.smoke_test' }, owner)
 
-        local stillHeld = false
-        for _, assignment in ipairs(after.ok and after.value.assignments or {}) do
-            if assignment.assignmentId == assignmentId then stillHeld = true end
-        end
+        local stillHeld = Holds(after, assignmentId) or Holds(after, secondId)
         local tests = {
             { 'register definition', registered.ok and registered.value.jobKey == jobKey
                 and registered.value.replayed == false },
@@ -92,6 +132,14 @@ Jobs.RegisterDevCommand('JobsLifecycleSmokeTest', function(source, args)
             { 'duty keeps identifiers', onDuty.ok and onDuty.value.dutyState == 'on_duty'
                 and onDuty.value.jobId == jobId and onDuty.value.gradeKey == 'senior' },
             { 'check returns facts', checked.ok and checked.value.matched == true },
+            { 'second employer kept apart', second.ok and Holds(both, assignmentId) and Holds(both, secondId) },
+            { 'duty filter excludes off', offDuty.ok and offDuty.value.matched == false },
+            { 'active selection switched', activated.ok and activated.value.activeAssignmentId == secondId },
+            { 'active-only check', activeCheck.ok and activeCheck.value.matched == true
+                and activeCheck.value.assignment.assignmentId == secondId },
+            { 'ending one keeps other', endedSecond.ok and Holds(afterSecond, assignmentId)
+                and not Holds(afterSecond, secondId) and afterSecond.value.activeAssignmentId == nil },
+            { 'reference recorded', referenced },
             { 'foreign mutation denied', not foreignEnd.ok and foreignEnd.code == 'authorization_denied' },
             { 'assignment ended', ended.ok and ended.value.status == 'ended' and ended.value.dutyState == 'off_duty' },
             { 'end is terminal', not endedAgain.ok and endedAgain.code == 'assignment_ended' },
@@ -116,6 +164,8 @@ Jobs.RegisterDevCommand('JobsLifecycleSmokeTest', function(source, args)
         end
         Explain('register', registered)
         Explain('assign', created)
+        Explain('assign-second', second)
+        Explain('activate', activated)
     end, debug.traceback)
     if not called then print('[JobsLifecycleSmokeTest] FAIL ' .. tostring(reason)) end
 end, true)
